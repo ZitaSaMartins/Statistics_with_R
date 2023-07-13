@@ -1,0 +1,693 @@
+---
+title: "Curso de estatítica em R - Bloco 2"
+output: html_notebook
+---
+
+Os dados utilizados para este bloco (ficheiro "DIETimpact_FAIR_database.xlsx") foram descarregados do repositório
+disponível em https://zenodo.org/record/6772838#.Y1AOOvzMJPY.
+
+Todos os ficheiros devem ser guardados na mesma pasta do Projecto.
+
+# 1. Instalar os pacotes necessários aos códigos que vamos utilizar
+
+```{r installpack, echo=F, warning=F, message=F}
+# Lista de pacotes que queremos instalar
+listOfPackages <- c("readxl", "xlsx", "dplyr", "ggplot2", "plyr", "ggpmisc", "psych","tidyverse", "caret", "rlang","writexl", "factoextra", "FactoMineR","corrplot", "NbClust")
+
+# Depois selecionamos apenas os pacotes que ainda não estão instalados.
+for (i in listOfPackages){
+     if(! i %in% installed.packages()){
+         install.packages(i, dependencies = TRUE)
+     }
+     require(i)
+}
+
+# update all available packages
+# update.packages(ask = FALSE)
+```
+
+
+
+# 2. Histograma 
+Para mais informações, consultar http://www.sthda.com/english/wiki/ggplot2-histogram-plot-quick-start-guide-r-software-and-data-visualization
+
+
+# 2.1. Preparar os dados
+Criar uma base de dados de peso aleatória com distribuição normal, com médias e desvio-padrões pré-definidos de 
+500 elementos dos sexo feminino (F) e masculino (M) 
+
+```{r histdata, echo=F, warning=F, message=F}
+
+# Criar uma base de dados aleatória de peso com elementos do sexo feminino (F) e masculino (M)
+set.seed(123) 
+Hdf <- data.frame(
+  sex=factor(rep(c("F", "M"), each=500)),
+  weight=round(c(rnorm(500, mean=60, sd=5), rnorm(500, mean=75, sd=5)))
+  )
+head(Hdf)
+
+```
+
+# 2.2. Histograma básico
+
+```{r histbase, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+
+# Histograma básico 
+ggplot(Hdf, aes(x=weight)) + geom_histogram()
+
+# Alterar a largura do bin
+ggplot(Hdf, aes(x=weight)) + 
+  geom_histogram(binwidth=1)
+
+```
+
+# 2.3. Adicionar uma linha com a média e visualizar a densidade no histograma
+No caso da densidade, o histograma é feito com a densidade e não com a frequência
+
+```{r histdens, echo=F, warning=F, message=F}
+# Criar e armazenar o histograma 
+h <- ggplot(Hdf, aes(x=weight)) + 
+  geom_histogram(color="black", fill="white")
+
+# Adicionar a linha média
+h+ geom_vline(aes(xintercept=mean(weight)),
+            color="blue", linetype="dashed", size=1)
+
+# Histograma com a densidade
+ggplot(Hdf, aes(x=weight)) + 
+ geom_histogram(aes(y=..density..), colour="black", fill="white")+
+ geom_density(alpha=.2, fill="#FF6666") # o valor de alpha controla o nível de transparência
+
+# Alterar a cor da linha e do preenchimento 
+ggplot(Hdf, aes(x=weight))+
+  geom_histogram(color="darkgreen", fill="lightgreen")
+```
+
+# 2.4. Histograma por grupos.
+
+
+```{r histgroup, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(plyr)
+
+# Alterar as cores da linha do histograma por grupos 
+ggplot(Hdf, aes(x=weight, color=sex)) +
+  geom_histogram(fill="white")
+
+# Histogramas sobrepostos 
+ggplot(Hdf, aes(x=weight, color=sex)) +
+  geom_histogram(fill="white", alpha=0.5, position="identity")
+
+
+# Dividir o gráfico em paineis múltiplos
+h<-ggplot(Hdf, aes(x=weight))+
+  geom_histogram(color="black", fill="white")+
+  facet_grid(sex ~ .)
+h
+
+# Adicionar linhas médias
+mu <- ddply(Hdf, "sex", summarise, grp.mean=mean(weight)) # Calcula a média para cada grupo
+h+geom_vline(data=mu, aes(xintercept=grp.mean, color="red"),
+             linetype="dashed")
+
+```
+
+
+# 3. Caixa-e-bigodes 
+Para mais informações, consultar http://www.sthda.com/english/wiki/wiki.php?title=ggplot2-box-plot-quick-start-guide-r-software-and-data-visualization
+
+# 3.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas em Proteínas e Hidratos de carbono totais. 
+Criar um dataframe a partir da base de dados resultante do mining do DIETxPOSOME, recolhendo informação sobre a ocorrência de contaminantes.
+
+```{r boxdata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+# Dados do DIETimpact
+Imp_df <- read_xlsx("DIETimpact_FAIR_database.xlsx", sheet=1) %>% as.data.frame()
+
+Prot <- Imp_df[,c("meal", "chemical", "amount")] %>% filter(chemical == "Protein")
+Macro <- Imp_df[,c("meal", "chemical", "amount")] %>% filter(chemical == c("Protein", "Fat", "Total Carbohydrates"))
+# Carb <- BPdf[,c("meal", "chemical", "amount")] %>% filter(chemical == "Total Carbohydrates")
+
+# Dados do DIETxPOSOME
+Xpo_df <- read_xlsx("DIETxPOSOME.xlsx", sheet=1) %>% as.data.frame()
+
+Cont <- Xpo_df[,c("food", "chemical","chemical_group", "amount")] %>% filter(chemical_group == "Metals")
+
+```
+
+# 3.2. Caixa-e-bigodes básico
+
+```{r boxbase, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+
+# Dados do DIETimpact
+# Caixa-e-bigodes básico
+bpP <- ggplot(Prot, aes(x=meal, y=amount)) + 
+  geom_boxplot()
+bpP
+
+bpM <- ggplot(Macro, aes(x=chemical, y=amount)) + 
+  geom_boxplot()
+bpM
+
+# Box plot with mean points
+bpP + stat_summary(fun.y=mean, geom="point", shape=3, size=3, colour ="red")
+bpM + stat_summary(fun.y=mean, geom="point", shape=3, size=3, colour ="red")
+
+
+# Dados do DIETxPOSOME
+# Caixa-e-bigodes básico
+bpCont <- ggplot(Cont, aes(x=chemical, y=amount)) + 
+  geom_boxplot()
+bpCont
+
+# Box plot with mean points
+bpCont + stat_summary(fun.y=mean, geom="point", shape=3, size=3, colour ="red")
+
+```
+
+
+# 3.3. Caixa-e-bigodes com cores por grupo
+
+```{r boxcolor, echo=F, warning=F, message=F}
+
+# Change box plot line colors by groups
+
+# DIETimpact
+
+bpP <- ggplot(Prot, aes(x=meal, y=amount, color=meal)) + 
+  geom_boxplot()
+bpP
+
+bpM <- ggplot(Macro, aes(x=chemical, y=amount, color=chemical)) + 
+  geom_boxplot()
+bpM
+
+#DIETxPOSOME
+
+bpCont <- ggplot(Cont, aes(x=chemical, y=amount, color=chemical)) + 
+  geom_boxplot()
+bpCont
+```
+
+
+# 3.4. Caixa-e-bigodes com cores por múltiplos grupos
+
+```{r boxcolorg, echo=F, warning=F, message=F}
+
+# Change box plot line colors by groups
+
+# DIETimpact
+ggplot(Macro, aes(x=meal, y=amount, color=chemical)) +
+  geom_boxplot()
+
+ggplot(Macro, aes(x=chemical, y=amount, color=meal)) +
+  geom_boxplot()
+
+# DIETxPOSOME
+
+bpCont <- ggplot(Cont, aes(x=chemical, y=amount, color=food)) + 
+  geom_boxplot()
+bpCont
+```
+
+
+# 4. Dispersão 
+
+# 4.1. Preparar os dados
+Criar um dataframe a partir de dados de retas de calibração de minerais do DIETimpact.   
+
+```{r ccdata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+CC1df <- read_xlsx("Dispersion.xlsx", sheet=1) %>% as.data.frame()
+CC2df <- read_xlsx("Dispersion.xlsx", sheet=2) %>% as.data.frame()
+CC3df <- read_xlsx("Dispersion.xlsx", sheet=3) %>% as.data.frame()
+```
+
+
+# 4.2. Gráfico e parâmetros de avaliação
+
+Explicação de cada secção que aparece no "summary()":
+
+ - Call: TEste é um recurso do R que mostra qual função e parâmetros foram usados para criar o modelo.
+ 
+ - Residuals: Diferença entre o que o modelo previu e o valor real de y.  
+ 
+ - Coefficients: Estes são os pesos que minimizam a soma do quadrado dos erros. 
+    * Std. Error: é o Erro Padrão Residual dividido pela raiz quadrada da soma do quadrado dessa variável x específica.
+    * t value: Estimate dividida pelo Std. Error
+    * Pr(>|t|): Para procurar o valor t numa tabela de distribuição T com os graus de liberdade fornecidos.
+    
+- Residual Standard Error: Em R, o resumo lm produz o desvio padrão do erro com uma leve torção. O desvio padrão é a raiz quadrada da variância. O erro padrão é muito semelhante. A única diferença é que ao invés de dividir por n-1, subtrai-se n menos 1 + # de variáveis envolvidas.
+
+- Multiple R-Squared: Também chamado de coeficiente de determinação. Indica quão bem o modelo se ajusta aos dados, mas não deve ser usada isoladamente. O R-quadrado subtrai o erro residual da variância em Y. Quanto maior o erro, pior será a variância restante.
+
+- Adjusted R-Squared: O Multiple R-Squared funciona bem para uma regressão linear simples (uma variável). No entanto, o modelo pode possuir múltiplas variáveis. Logo, quantas mais variáveis forem adicionadas, mais variância vai ser necessário explicar. 
+De forma a controla as variáveis extras, o Adjusted R-Squared  normaliza o Multiple R-Squared (tendo em conta o número de amostras e de variáveis usadas).
+
+- F-Statistic:  É a razão de duas variâncias (SSR/SSE), a variância explicada pelos parâmetros do modelo (soma dos quadrados da regressão, SSR) e a variância residual ou não explicada (soma dos quadrados do erro, SSE). Indica se o modelo de regressão linear fornece um ajuste melhor aos dados do que um modelo que não contém variáveis independentes (apenas a ordenada na origem).
+    
+    
+```{r ccgraph, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+
+#### DADOS ORIGINAIS ####
+# Modelo de regressão linear
+CC1 <- lm(Abs ~ `Ca.Concentration(ppm)`, CC1df)
+
+# Imprimir a equação do modelo
+paste("y =", coef(CC1)[[1]], "+", coef(CC1)[[2]], "* x")
+
+# Gráfico de dispersão com linha de regressão
+ggplot(data = CC1df, aes(x = `Ca.Concentration(ppm)`, y = Abs)) +
+  xlab("Concentração Ca (ppm)") + 
+  ylab("Absorvância") + 
+  stat_poly_line() +
+  stat_poly_eq(aes(label = after_stat(eq.label))) +
+  stat_poly_eq(label.y = 0.9, rr.digits = 4) +
+  geom_point()
+            
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(CC1)
+
+# Gráfico dos resíduos
+CC1_res <- resid(CC1)
+plot(CC1df$`Ca.Concentration(ppm)`, CC1_res, xlab = "Concentração Ca (ppm)", ylab = "Resíduos")
+abline(0,0)
+
+```
+
+# 4.3. Quando algo corre mal (parte 1)
+Erro ao passar de 5 para 4 ppm
+
+```{r ccgraph2, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+
+# Modelo de regressão linear
+CC2 <- lm(Abs ~ `Ca.Concentration(ppm)`, CC2df)
+
+# Imprimir a equação do modelo
+paste("y =", coef(CC2)[[1]], "+", coef(CC2)[[2]], "* x")
+
+# Gráfico de dispersão com linha de regressão
+ggplot(data = CC2df, aes(x = `Ca.Concentration(ppm)`, y = Abs)) +
+  xlab("Concentração Ca (ppm)") + 
+  ylab("Absorvância") + 
+  stat_poly_line() +
+  stat_poly_eq(aes(label = after_stat(eq.label))) +
+  stat_poly_eq(label.y = 0.9, rr.digits = 4) +
+  geom_point()
+            
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(CC2)
+
+# Gráfico dos resíduos
+CC2_res <- resid(CC2)
+plot(CC2df$`Ca.Concentration(ppm)`, CC2_res, xlab = "Concentração Ca (ppm)", ylab = "Resíduos")
+abline(0,0)
+
+```
+
+# 4.4. Quando algo corre mal (parte 2)
+Erro na diluição 2 ppm
+
+```{r ccgraph3, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+
+# Modelo de regressão linear
+CC3 <- lm(Abs ~ `Ca.Concentration(ppm)`, CC3df)
+
+# Imprimir a equação do modelo
+paste("y =", coef(CC3)[[1]], "+", coef(CC3)[[2]], "* x")
+
+# Gráfico de dispersão com linha de regressão
+ggplot(data = CC3df, aes(x = `Ca.Concentration(ppm)`, y = Abs)) +
+  xlab("Concentração Ca (ppm)") + 
+  ylab("Absorvância") + 
+  stat_poly_line() +
+  stat_poly_eq(aes(label = after_stat(eq.label))) +
+  stat_poly_eq(label.y = 0.9, rr.digits = 4) +
+  geom_point()
+            
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(CC3)
+
+# Gráfico dos resíduos
+CC3_res <- resid(CC3)
+plot(CC3df$`Ca.Concentration(ppm)`, CC3_res, xlab = "Concentração Ca (ppm)", ylab = "Resíduos")
+abline(0,0)
+
+```
+
+
+# 5. Medidas
+
+# 5.1. Preparar os dados
+Criar um dataframe a partir de dados das dietas do DIETimpact.   
+
+```{r medidasdata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+```
+
+# 5.2. Tabelas com medidas de tendência central, variância e forma
+
+```{r medidastab, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(psych)
+library(tidyverse)
+
+Table <- describeBy(D_df[,-1], quant=c(.25,.75), IQR=TRUE,  group = D_df$Diet)
+
+knitr::kable(Table$Broccoli, digits = 2, caption = "Sumário para a dieta com bróculos.")
+knitr::kable(Table$Chickpea, digits = 2, caption = "Sumário para a dieta com grão de bico.")
+knitr::kable(Table$Mackarel, digits = 2, caption = "Sumário para a dieta com cavala.")
+knitr::kable(Table$`Olive oil`, digits = 2, caption = "Sumário para a dieta com azeite.")
+knitr::kable(Table$Strawberry, digits = 2, caption = "Sumário para a dieta com morangos.")
+knitr::kable(Table$WD, digits = 2, caption = "Sumário para a dieta de referência (WD).")
+
+```
+
+
+# 6. Distribuição normal
+
+# 6.1. Preparar os dados
+Criar um dataframe a partir de dados das dietas do DIETimpact e DIETxPOSOME.   
+
+```{r dndata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+Xpo_df <- read_xlsx("DIETxPOSOME.xlsx", sheet=1) %>% as.data.frame()
+Cont <- Xpo_df[,c("food", "chemical","chemical_group", "amount")] %>% filter(chemical_group == "PAHs")
+
+```
+
+# 6.2. Gráficos
+
+```{r dngraph, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(psych)
+library(tidyverse)
+
+# Gráfico no mesmo painel
+
+# DIETimpact
+D_df %>% 
+  ggplot(aes(x=Energy, fill=Diet))+
+  geom_density(alpha=0.5)+
+  scale_x_log10()+ 
+  labs(x="Energy")
+
+# DIETxPOSOME
+Cont %>% 
+  ggplot(aes(x=amount, fill=chemical))+
+  geom_density(alpha=0.5)+
+  scale_x_log10()+ 
+  labs(x="Contaminant content")
+
+
+# Dividir o gráfico em paineis múltiplos
+
+# DIETimpact
+D_df %>% 
+  ggplot(aes(x=Energy, fill=Diet))+
+  geom_density(alpha=0.5)+
+  scale_x_log10()+ 
+  facet_wrap(~Diet)+
+  theme(legend.position="none")+
+  labs(x="Energy")
+
+# DIETxPOSOME
+Cont %>% 
+  ggplot(aes(x=amount, fill=chemical))+
+  geom_density(alpha=0.5)+
+  scale_x_log10()+ 
+  facet_wrap(~chemical, ncol=3)+
+  theme(legend.position="none")+
+  labs(x="Contaminant content")
+
+```
+
+# 7. Normalização
+
+# 7.1. Preparar os dados
+Criar um dataframe a partir de dados das dietas do DIETimpact e DIETxPOSOME.   
+
+```{r Normdata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+Xpo_df <- read_xlsx("DIETxPOSOME.xlsx", sheet=1) %>% as.data.frame()
+Cont <- Xpo_df[,c("food", "chemical","chemical_group", "amount")] %>% filter(chemical_group == "PAHs")
+
+```
+
+# 7.2. Normalização (média=0, var=1)
+
+```{r Normnorm, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(caret)
+
+D_norm <- predict(preProcess(D_df, method=c("center","scale")), D_df)
+
+summary(D_norm[,-1])
+```
+
+# 8. PCA
+
+Mais informação em: http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
+
+# 8.1. Preparar os dados
+Criar um dataframe a partir de dados das dietas do DIETimpact    
+
+```{r pcadata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+# D_df <- D_df[,-1]
+row.names(D_df) <- D_df[,1]
+
+```
+
+# 8.2. Análise
+
+```{r ipcapca, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(factoextra)
+library(FactoMineR)
+
+##### PCA #####
+iPCA <- PCA(D_df[,-c(1,2)], ind.sup = NULL, quali.sup = NULL, ncp = 5, scale=TRUE, graph=FALSE)
+
+fviz_eig(iPCA, addlabels = TRUE, ylim = c(0, 100))
+# fviz_eig(iPCA, addlabels = TRUE)
+
+##### Biplot ####
+
+cat("\n Biplot das variáveis (nutrientes) e indivíduos (dietas) de acordo com a qualidade de representação pelo componente principal \n")
+cat(sep="\n")
+
+options(ggrepel.max.overlaps = Inf)
+
+# fviz_pca_biplot(a_PCA, col.var = "#00AFBB", col.ind = "#FC4E07", pointsize = 1.5, geom.var = c("point", "text"), title = NULL,labelsize = 3, repel = TRUE, ggtheme = theme_bw()) + xlim(-15, 12) + ylim (-8, 10) 
+
+fviz_pca_biplot(iPCA, col.var = "grey55",label = "var", habillage = as.factor(D_df$Diet), palette = c("goldenrod", "tan4", "deeppink3", "firebrick3", "dodgerblue", "green4"), pointsize = 1.5, geom.var = c("point", "text"), title = NULL,labelsize = 3, repel = TRUE, ggtheme = theme_bw()) +        scale_shape_manual(values=c(15, 16, 17, 3, 4, 8)) + scale_size_manual(values=c(3,3,3,3,3,3)) + xlim(-5, 5) + ylim (-5, 5)
+```
+
+# 8.2.1. Variáveis
+
+```{r ipcavar, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(factoextra)
+library(FactoMineR)
+library(corrplot)
+
+
+# Gráfico simples
+fviz_pca_var(iPCA, col.var = "black")
+
+corrplot(get_pca_var(iPCA)$cos2, is.corr=FALSE)
+
+# Gráfico com cor por cos2
+fviz_pca_var(iPCA, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE)
+```
+
+# 8.2.1. Indivíduos
+
+```{r ipcaind, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(factoextra)
+library(FactoMineR)
+library(corrplot)
+
+
+# Gráfico simples
+fviz_pca_ind(iPCA)
+
+corrplot(get_pca_ind(iPCA)$cos2, is.corr=FALSE)
+
+# Gráfico com cor por cos2
+fviz_pca_ind(iPCA, col.ind = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE)
+```
+
+# 8.3. Guardar resultados
+```{r res, echo=F, message=F, warning=F}
+library(xlsx)
+
+#### DIETimpact ####
+i_eig <- as.data.frame(iPCA$eig)
+
+i_var_coord <- as.data.frame(iPCA$var$coord) 
+i_var_cor <- as.data.frame(iPCA$var$cor)
+i_var_cos2 <- as.data.frame(iPCA$var$cos2)
+i_var_cont <- as.data.frame(iPCA$var$contrib)
+
+i_ind_coord <- as.data.frame(iPCA$ind$coord)
+i_ind_cor <- as.data.frame(iPCA$ind$cor)
+i_ind_cos2 <- as.data.frame(iPCA$ind$cos2)
+i_ind_cont <- as.data.frame(iPCA$ind$contrib)
+
+xlsx::write.xlsx(i_eig,'Resultados_iPCA.xlsx', sheetName = 'eigenvalues', append = FALSE)
+
+xlsx::write.xlsx(i_var_coord,'Resultados_iPCA.xlsx', sheetName = 'var_coordinates', append = TRUE)
+xlsx::write.xlsx(i_var_cor,'Resultados_iPCA.xlsx', sheetName = 'var_correlation', append = TRUE)
+xlsx::write.xlsx(i_var_cos2,'Resultados_iPCA.xlsx', sheetName = 'var_cos2', append = TRUE)
+xlsx::write.xlsx(i_var_cont,'Resultados_iPCA.xlsx', sheetName = 'var_contribution', append = TRUE)
+
+xlsx::write.xlsx(i_ind_coord,'Resultados_iPCA.xlsx', sheetName = 'ind_coordinates', append = TRUE)
+xlsx::write.xlsx(i_ind_cos2,'Resultados_iPCA.xlsx', sheetName = 'ind_cos2', append = TRUE)
+xlsx::write.xlsx(i_ind_cont,'Resultados_iPCA.xlsx', sheetName = 'ind_contribution', append = TRUE)
+
+
+```
+
+# 9. Análise de clusters por K-means
+
+Mais informação em: http://www.sthda.com/english/articles/25-clusteranalysis-in-r-practical-guide/
+
+# 9.1. Preparar os dados
+Criar um dataframe a partir de dados das dietas do DIETimpact    
+
+```{r clustdata, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+# D_df <- D_df[,-1]
+row.names(D_df) <- D_df[,1]
+
+ipca <- prcomp(D_df[,-c(1,2)], center = TRUE, scale = TRUE)
+
+icoord <- as.data.frame(-ipca$x[,1:2])
+
+```
+
+# 9.2. Número de clusters
+
+```{r iclustn, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(factoextra)
+library(NbClust)
+
+# Método "Elbow" 
+fviz_nbclust(icoord, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+# Método "Silhouette" 
+fviz_nbclust(icoord, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+# Estatística "Gap"
+set.seed(123)
+fviz_nbclust(icoord, kmeans, nstart = 25,  method = "gap_stat", nboot = 500)+
+  labs(subtitle = "Gap statistic method")
+
+NbClust(data =icoord, diss = NULL, distance = "euclidean",
+        min.nc = 2, max.nc = 5, method = "kmeans")
+
+```
+A desvantagem dos métodos de "cotovelo"elbow" e "silhouette" é que eles medem apenas uma característica de agrupamento global. Um método mais sofisticado é usar a estatística de "gap" que fornece um procedimento estatístico para formalizar a heurística cotovelo/silhueta para estimar o número ótimo de clusters.
+
+
+# 9.3. Análise e gráficos
+
+```{r iclust, echo=F, warning=F, message=F}
+
+# Chamar a biblioteca que precisamos para correr o código
+library(factoextra)
+library(NbClust)
+
+ikm <- kmeans(icoord, 3, nstart = 200)
+
+print(ikm)
+
+head(ikm$cluster,36)
+
+# fviz_cluster(ikm, data = icoord,
+#              palette = "jco", 
+#              geom = "point",
+#              ellipse.type = "convex", 
+#              ggtheme = theme_bw()
+#              )
+
+fviz_cluster(ikm, data = icoord, repel = TRUE, show.clust.cent = FALSE, pallete = "jco", ggtheme = theme_bw(), main = "Factor map:")
+
+# fviz_cluster(ikm, data = icoord[,1:2], repel = TRUE, show.clust.cent = FALSE, pallete = "jco", ggtheme = theme_bw(), main = "Factor map:")
+```
+
+
+
+
+
+

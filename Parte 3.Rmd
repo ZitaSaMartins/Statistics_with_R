@@ -1,0 +1,643 @@
+---
+title: "Curso de estatítica em R - Parte 3"
+output: html_notebook
+---
+
+Todos os ficheiros devem ser guardados na mesma pasta do Projecto.
+
+# 1. Instalar os pacotes necessários aos códigos que vamos utilizar
+
+```{r installpack, echo=F, warning=F, message=F}
+# Lista de pacotes que queremos instalar
+listOfPackages <- c("readxl", "xlsx", "dplyr", "ggplot2", "plyr", "ggpmisc", "psych","tidyverse", "caret", "rlang","writexl", "factoextra", "FactoMineR","corrplot", "NbClust", "ggpubr", "data.table", "multcomp", "DescTools", "car", "FSA", "rcompanion", "agricolae", "coin", "rstatix", "lsmeans", "nlme","RColorBrewer","corrplot","PerformanceAnalytics" )
+
+# Depois selecionamos apenas os pacotes que ainda não estão instalados.
+for (i in listOfPackages){
+     if(! i %in% installed.packages()){
+         install.packages(i, dependencies = TRUE)
+     }
+     require(i)
+}
+
+# update all available packages
+# update.packages(ask = FALSE)
+```
+
+
+
+# 2. Testar Normalidade 
+Para mais informações, consultar: http://www.sthda.com/english/wiki/normality-test-in-r
+
+
+# 2.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas
+
+```{r normdata, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+```
+
+# 2.2. Métodos visuais
+
+```{r normvis, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+# Gráfico de densidade 
+cat("Gráfico de densidade:", sep="\n")
+cat(sep="\n")
+ggdensity(D_df$Energy, 
+          main = "Gráfico de densidade para a Energia",
+          xlab = "Energia") # Uma variável
+
+lapply(names(D_df[,-1]), function(x) {
+  ggdensity(data=D_df[,-1], x=x, title=x)
+  }) # Todas as variáveis
+
+cat(sep="\n")
+cat(sep="\n")
+# Gráfico Q-Q (Gráfico quanti-quantil) desenha a correlação entre uma amostra e a distribuição normal. 
+cat("Gráfico Q-Q:", sep="\n")
+cat(sep="\n")
+ggqqplot(D_df$Energy) # Uma variável
+
+lapply(names(D_df[,-1]), function(x) {
+  ggqqplot(data=D_df[,-1], x=x, title=x)
+  })  # Todas as variáveis
+
+```
+
+# 2.3. Teste de normalidade com o teste Shapiro-Wilk
+Apesar de ser uma forma interessante de avaliar a normalidade visualmente, essa avaliação geralmente não é confiável. É possível usar um teste de significância comparando a distribuição da amostra com uma normal para verificar se os dados mostram ou não um desvio grave da normalidade.
+
+```{r normsw, echo=F, warning=F, message=F}
+# shapiro.test(D_df$Energy)
+
+do.call(rbind, lapply(D_df[,-1], function(x) shapiro.test(x)[c("statistic", "p.value")]))
+
+```
+
+
+
+# 3. Teste de hipóteses
+
+# 3.1. Amostras = 1
+Para mais informações, consultar:
+http://www.sthda.com/english/wiki/one-sample-t-test-in-r
+http://www.sthda.com/english/wiki/one-sample-wilcoxon-signed-rank-test-in-r
+
+# 3.1.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas
+
+```{r hipdata1am, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+```
+
+# 3.1.2. Testar normalidade
+
+```{r normhip1am, echo=F, warning=F, message=F}
+# Testar normalidade
+TH.1am.1 <- D_df[,c("Diet","Protein")] %>% filter(Diet == "WD") 
+shapiro.test(TH.1am.1$Protein)
+
+TH.1am.2 <- D_df[,c("Diet","Ashes")] %>% filter(Diet == "Chickpea")
+shapiro.test(TH.1am.2$Ashes)
+
+```
+# 3.1.3. Teste paramétrico (Teste t: Uma amostra)
+Feito para "TH.1am.1", onde valor médio teórico (mu*) é 7.65.
+
+*mu é a média teórica. O valor predefenido é 0, mas pode ser alterado.
+```{r hip1amtt, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+t.test(TH.1am.1$Protein, mu = 7.65, alternative = "two.sided") #"alternative" também pode ser "greater" ou "lesser"
+
+```
+
+# 3.1.4. Teste não paramétrico (Teste de classificação de Wilcoxon: Uma amostra)
+Feito para "TH.1am.2", onde valor médie teórico (mu*) é 0.71.
+
+*mu é a média teórica. O valor predefenido é 0, mas pode ser alterado.
+```{r hip1amwt, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+wilcox.test(TH.1am.2$Ashes, mu = 0.71, alternative = "two.sided") #"alternative" também pode ser "greater" ou "lesser"
+
+```
+
+# 3.2. Amostras = 2, independentes
+Para mais informações, consultar:
+http://www.sthda.com/english/wiki/unpaired-two-samples-t-test-in-r
+http://www.sthda.com/english/wiki/unpaired-two-samples-wilcoxon-test-in-r
+
+# 3.2.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas
+
+```{r hipdata2ami, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+```
+
+# 3.2.2. Testar normalidade
+
+```{r normhip2ami, echo=F, warning=F, message=F}
+library(data.table)
+
+# Testar normalidade
+TH.2ami.1 <- D_df[,c("Diet","Protein")] %>% filter(Diet == c("WD","Strawberry")) 
+with(TH.2ami.1, shapiro.test(Protein[Diet == "WD"]))
+with(TH.2ami.1, shapiro.test(Protein[Diet == "Strawberry"]))
+# TH.2ami.1 %>% 
+#   group_by(Diet) %>% 
+#   summarise(statistic = shapiro.test(Protein)$statistic,
+#             p.value = shapiro.test(Protein)$p.value)
+
+TH.2ami.2 <- D_df[,c("Diet","Protein")] %>% filter(Diet == c("WD","Chickpea"))
+with(TH.2ami.2, shapiro.test(Protein[Diet == "WD"]))
+with(TH.2ami.2, shapiro.test(Protein[Diet == "Chickpea"]))
+# TH.2ami.2 %>% 
+#   group_by(Diet) %>% 
+#   summarise(statistic = shapiro.test(Protein)$statistic,
+#             p.value = shapiro.test(Protein)$p.value)
+
+
+TH.2ami.3 <- D_df[,c("Diet","Ashes")] %>% filter(Diet == c("WD","Mackarel"))
+with(TH.2ami.3, shapiro.test(Ashes[Diet == "WD"]))
+with(TH.2ami.3, shapiro.test(Ashes[Diet == "Mackarel"]))
+# TH.2ami.3 %>% 
+#   group_by(Diet) %>% 
+#   summarise(statistic = shapiro.test(Ashes)$statistic,
+#             p.value = shapiro.test(Ashes)$p.value)
+
+```
+# 3.2.3. Teste paramétrico (Teste t: Duas amostras independetes)
+Feito para "TH.2ami.1".
+
+```{r hip2amitt, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+var.test(Protein ~ Diet, data = TH.2ami.1) # teste de homogeneidada de variância
+
+t.test(Protein ~ Diet, data = TH.2ami.1, var.equal = TRUE)
+
+# se var.test der não significativo, var.equal = TRUE. Caso contrário, var.equal = FALSE
+```
+
+# 3.2.4. Teste não paramétrico (Teste de Mann-Whitney-Wilcoxon)
+Feito para "TH.2ami.2" e "TH.2ami.3".
+
+```{r hip2amiwc, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+# library(coin)
+wilcox.test(Protein ~ Diet, data = TH.2ami.2, paired = FALSE, exact = FALSE)
+
+wilcox.test(Ashes ~ Diet, data = TH.2ami.3, paired = FALSE, exact = FALSE)
+
+#### Como alternativa, o teste de Mann–Whitney pode ser realizado por teste exato ou simulação de Monte Carlo com o pacote "coin" #####
+# TH.2ami.2$Diet <- as.factor(TH.2ami.2$Diet)
+# TH.2ami.3$Diet <- as.factor(TH.2ami.3$Diet)
+# 
+# wilcox_test(Protein ~ Diet, data = TH.2ami.2, distribution = "exact")
+# 
+# wilcox_test(Ashes ~ Diet, data = TH.2ami.3, distribution = "exact")
+
+```
+
+# 3.3. Amostras = 2, emparelhadas
+Para mais informações, consultar:
+http://www.sthda.com/english/wiki/paired-samples-t-test-in-r
+http://www.sthda.com/english/wiki/paired-samples-wilcoxon-test-in-r
+
+# 3.2.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas
+
+```{r hipdata2ame, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+D_df <- D_df[,-1]
+
+```
+
+# 3.2.2. Testar normalidade
+
+```{r normhip2ame, echo=F, warning=F, message=F}
+library(data.table)
+
+# Testar normalidade
+TH.2ame.1 <- D_df[,c("Diet","Protein", "Moisture")] %>% filter(Diet == "WD") 
+TH.2ame.1$Dry <- TH.2ame.1$Protein*100/TH.2ame.1$Moisture
+
+with(TH.2ame.1, shapiro.test(Protein))
+with(TH.2ame.1, shapiro.test(Dry))
+
+
+TH.2ame.2 <- D_df[,c("Diet","Ashes","Moisture")] %>% filter(Diet == "Mackarel")
+TH.2ame.2$Dry <- TH.2ame.2$Ashes*100/TH.2ame.2$Moisture
+with(TH.2ame.2, shapiro.test(Ashes))
+with(TH.2ame.2, shapiro.test(Dry))
+
+```
+# 3.2.3. Teste paramétrico (Teste t: Duas amostras emparelhadas)
+Feito para "TH.2ame.1".
+
+```{r hip2amett, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+t.test(TH.2ame.1$Protein,TH.2ame.1$Dry, paired = TRUE) #nesta forma porque os dados estão guardados em 2 vetores numéricos
+
+
+```
+
+# 3.2.4. Teste não paramétrico (Teste de classificação de Wilcoxon: Duas amostras)
+Feito para "TH.2ame.2".
+
+```{r hip2amewc, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+
+wilcox.test(TH.2ame.2$Ashes,TH.2ame.2$Dry, paired = TRUE)#nesta forma porque os dados estão guardados em 2 vetores numéricos
+
+
+```
+
+# 3.3. Amostras > 2, 1 fator
+Para mais informações, consultar:
+http://www.sthda.com/english/wiki/one-way-anova-test-in-r
+
+# 3.3.1. Preparar os dados
+Criar um dataframe a partir da base de dados do DIETimpact, recolhendo informação sobre a composição das dietas
+
+```{r hipdata2a1f, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+D_df <- read_xlsx("Diets.xlsx", sheet=1) %>% as.data.frame()
+
+```
+
+# 3.3.2. Testar normalidade
+
+```{r normhipm2am1f, echo=F, warning=F, message=F}
+library(data.table)
+
+# Testar normalidade
+TH.2a1f.1 <- D_df[,c("Diet","Energy")]
+TH.2a1f.1$Diet <- as.factor(TH.2a1f.1$Diet)
+TH.2a1f.1 %>%
+  group_by(Diet) %>%
+  summarise(statistic = shapiro.test(Energy)$statistic,
+            p.value = shapiro.test(Energy)$p.value)
+
+TH.2a1f.2 <- D_df[,c("Diet","Ashes")]
+TH.2a1f.2$Diet <- as.factor(TH.2a1f.2$Diet)
+TH.2a1f.2 %>%
+  group_by(Diet) %>%
+  summarise(statistic = shapiro.test(Ashes)$statistic,
+            p.value = shapiro.test(Ashes)$p.value)
+
+```
+
+# 3.3.3. Teste paramétrico (ANOVA unidirecional)
+Feito para "TH.2a1f.1".
+
+```{r hipm2amta, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(multcomp)
+library(DescTools)
+library(car)
+library(agricolae)
+library(rstatix)
+library(rcompanion)
+
+# Teste de homogeneidada de variância
+leveneTest(Energy ~ Diet, data = TH.2a1f.1) 
+
+# ANOVA 
+un.anova <- aov(Energy ~ Diet ,data = TH.2a1f.1)
+summary(un.anova)
+
+# Teste post-hoc: Tukey (comparação entre amostras)
+tuk <- glht(un.anova, linfct = mcp(Diet = "Tukey"))
+tuk.cld <- cld(tuk)
+tuk.cld
+
+# Teste post-hoc: Dunnett (comparação com controlo)
+DunnettTest(x=TH.2a1f.1$Energy, g=TH.2a1f.1$Diet) # corrigir a amostra controlo
+
+#### SE LEVENE <0.05 ####
+# ANOVA (com correção de Welch) 
+w.un.anova <- oneway.test(Energy ~ Diet ,data = TH.2a1f.1, var.equal = FALSE)
+w.un.anova
+
+# Teste post-hoc: Games-Howel (comparação entre amostras se correção de Welch for aplicada)
+gh <- games_howell_test(data = TH.2a1f.1, Energy ~ Diet)
+gh1 <- transform(gh, comp = paste0(group1," - ",group2))
+cldList(comparison = gh1$comp,
+    p.value    = gh1$p.adj,
+    threshold  = 0.05)
+```
+
+# 3.3.4. Teste não paramétrico (Teste de Krudkal-Wallis)
+Feito para "TH.2a1f.1" ".
+
+```{r hipm2amikw, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggpubr)
+library(FSA)
+library(rcompanion)
+
+# Kruskal-Wallis
+kw <- kruskal.test(Ashes ~ Diet ,data = TH.2a1f.2)
+kw
+
+# Teste post-hoc: Dunn (comparação entre amostras)
+du <- dunnTest(Ashes ~ Diet ,data = TH.2a1f.2, method = "bonferroni")
+
+cldList(comparison = du$res$Comparison,
+    p.value    = du$res$P.adj,
+    threshold  = 0.05)
+
+
+```
+
+
+# 3.4. Amostras > 2, 2 fatores
+Para mais informações, consultar:
+http://www.sthda.com/english/wiki/two-way-anova-test-in-r
+
+# 3.4.1. Preparar os dados
+Criar um dataframe a partir da base de dados da folha da moringa
+
+```{r hipdata2a2f, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+M_df <- read_xlsx("Moringa.xlsx", sheet=1) %>% as.data.frame()
+M_df$Leaf <- as.factor(M_df$Leaf)
+M_df$Year <- as.factor(M_df$Year)
+
+
+```
+
+
+# 3.4.2. ANOVA bidirecional, sem interações significativas
+
+```{r hipm2am2fsin, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(multcomp)
+library(DescTools)
+library(car)
+library(agricolae)
+
+# Teste de homogeneidada de variância
+leveneTest(Moisture ~ Leaf * Year, data = M_df) 
+
+# ANOVA  
+m.bi.anova <- aov(formula = Moisture ~ Leaf * Year, data = M_df)
+summary(m.bi.anova)
+
+m.l.anova <-  aov(Moisture ~ Leaf, data = M_df)
+summary(m.l.anova)
+
+m.y.anova <-  aov(Moisture ~ Year, data = M_df)
+summary(m.y.anova)
+
+# Teste post-hoc: Tukey (comparação entre amostras)
+# tuk.m.l <- glht(m.l.anova, linfct = mcp(Leaf = "Tukey"))
+# tuk.m.l.cld <- cld(tuk.m.l)
+# tuk.m.l.cld
+
+tuk.m.y <- glht(m.y.anova, linfct = mcp(Year = "Tukey"))
+tuk.m.y.cld <- cld(tuk.m.y)
+tuk.m.y.cld
+
+```
+
+# 3.4.3. ANOVA bidirecional, com interações significativas
+
+```{r hipm2am2fcin, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(multcomp)
+library(DescTools)
+library(car)
+library(agricolae)
+library(nlme)
+
+# Teste de homogeneidada de variância
+leveneTest(Protein ~ Leaf * Year, data = M_df) 
+
+# ANOVA  
+p.bi.anova <- aov(formula = Protein ~ Leaf * Year, data = M_df)
+summary(p.bi.anova)
+
+# Teste post-hoc: Tukey (comparação entre amostras)
+M_df$LY<-interaction(M_df$Leaf,M_df$Year)
+mod<-lme(Protein~-1+LY, data=M_df, random=~1|Leaf/Year)
+# summary(glht(mod,linfct=mcp(SHD="Tukey")))
+tuk.m.y <- glht(mod, linfct = mcp(LY = "Tukey"))
+tuk.m.y.cld <- cld(tuk.m.y)
+tuk.m.y.cld
+
+```
+
+# 4. Regressões lineares
+Para mais informações, consultar:
+http://www.sthda.com/english/articles/40-regression-analysis/167-simple-linear-regression-in-r/
+http://www.sthda.com/english/articles/40-regression-analysis/168-multiple-linear-regression-in-r/
+
+# 4.1. Regressões lineares simples
+
+# 4.1.1. Preparar os dados
+Criar um dataframe a partir da base de dados  das retas de calibração dos minerais
+
+```{r sregdata, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+CC_df <- read_xlsx("Dispersion.xlsx", sheet=1) %>% as.data.frame()
+
+```
+
+
+# 4.4.2. Modelo e avaliação
+Neste exemplo, tanto os valores de p para a ordenada na origem como para a variável preditora são significativos. Por isso, podemos rejeitar a hipótese nula e aceitar a hipótese alternativa (há uma associação significativa entre as variáveis preditoras e de resultado).
+
+Resumo
+Após computar um modelo de regressão, o primeiro passo é verificar se, pelo menos, um preditor está significativamente associado às variáveis de output.
+
+Se um ou mais preditores forem significativos, a segunda etapa é avaliar quão bem o modelo se ajusta aos dados verificando o Erro Padrão dos Resíduos (RSE), o valor R2 e as estatísticas F. Essas métricas fornecem a qualidade geral do modelo.
+
+RSE: Quanto mais próximo de zero, melhor
+R-quadrado: quanto mais alto melhor
+Estatística F: quanto maior, melhor
+
+```{r srmodel, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+
+# Modelo de regressão linear
+CC <- lm(Abs ~ `Ca.Concentration(ppm)`, CC_df)
+
+# Imprimir a equação do modelo
+paste("y =", coef(CC)[[1]], "+", coef(CC)[[2]], "* x")
+
+# Gráfico de dispersão com linha de regressão
+ggplot(data = CC_df, aes(x = `Ca.Concentration(ppm)`, y = Abs)) +
+  xlab("Concentração Ca (ppm)") + 
+  ylab("Absorvância") + 
+  stat_poly_line() +
+  stat_poly_eq(aes(label = after_stat(eq.label))) +
+  stat_poly_eq(label.y = 0.9, rr.digits = 4) +
+  geom_point()
+            
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(CC)
+
+# Intervalo de confiança 
+confint(CC)
+
+# Gráfico dos resíduos
+CC_res <- resid(CC)
+plot(CC_df$`Ca.Concentration(ppm)`, CC_res, xlab = "Concentração Ca (ppm)", ylab = "Resíduos")
+abline(0,0)
+
+```
+
+# 4.2. Regressões lineares múltipla
+
+# 4.2.1. Preparar os dados
+Criar um dataframe a partir da base de dados dos parametros físicos de diferentes pães
+
+```{r mregdata, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+BF_df <- read_xlsx("Breads.xlsx", sheet=1) %>% as.data.frame()
+
+```
+
+
+# 4.4.2. Modelo e avaliação
+No primeiro exemplo (Volume), apenas os valores de p para a ordenada na origem são significativos. Por isso, podemos aceitar a hipótese nula e aceitar a hipótese alternativa (há uma associação significativa entre as variáveis preditoras e de resultado).
+
+No segundo exemplo ([IDF]), quer os valores de p para a ordenada na origem, queros para a variável preditorasão significativos. Por isso, podemos rejeitar a hipótese nula e aceitar a hipótese alternativa (há uma associação significativa entre as variáveis preditoras e de resultado).
+
+Resumo
+Após computar um modelo de regressão, o primeiro passo é verificar se, pelo menos, um preditor está significativamente associado às variáveis de output.
+
+Se um ou mais preditores forem significativos, a segunda etapa é avaliar quão bem o modelo se ajusta aos dados verificando o Erro Padrão dos Resíduos (RSE), o valor R2 e as estatísticas F. Essas métricas fornecem a qualidade geral do modelo.
+
+RSE: Quanto mais próximo de zero, melhor
+R-quadrado: quanto mais alto melhor
+Estatística F: quanto maior, melhor
+
+```{r mrmodel, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+
+#### Volume ####
+# Modelo de regressão linear
+V <- lm(Volume ~ `[Extract]` + `[TDF]` + `[IDF]`, BF_df)
+
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(V)
+
+# Verificar que variáveis preditoras são significativas
+summary(V)$coefficient
+
+#### [IDF] ####
+# Modelo de regressão linear
+IDF <- lm(`[IDF]` ~ `[Extract]` + `[TDF]` , BF_df)
+
+# Resumo da regressão linear correspondente à reta de calibração (incluido os resíduos)
+summary(IDF)
+
+# Verificar que variáveis preditoras são significativas
+summary(IDF)$coefficient
+
+
+```
+
+
+# 5. Correlações
+Para mais informações, consultar::
+http://www.sthda.com/english/wiki/correlation-test-between-two-variables-in-r
+http://www.sthda.com/english/wiki/correlation-analyses-in-r
+
+# 5.1. Preparar os dados
+Criar um dataframe a partir da base de dados dos parametros de bioacessibilidade de minerais de diferentes pães
+
+```{r corrdata, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(dplyr)
+library(readxl)
+
+BM_df <- read_xlsx("Breads.xlsx", sheet=2) %>% as.data.frame()
+
+```
+
+# 5.2. Avaliação
+
+
+```{r ccmodel, echo=F, warning=F, message=F}
+# Chamar a biblioteca que precisamos para correr o código
+library(ggplot2)
+library(ggpmisc)
+library(ggpubr)
+library(RColorBrewer)
+library(corrplot)
+library(PerformanceAnalytics)
+
+# Testar normalidade
+do.call(rbind, lapply(BM_df[,-1], function(x) shapiro.test(x)[c("statistic", "p.value")]))
+
+# Pearson
+PC <- cor(BM_df[,-1],method = "pearson")
+PC
+
+# Spearman
+SC <- cor(BM_df[,-1],method = "spearman")
+SC
+
+
+# Gráficos
+corrplot(PC, type="upper", order="hclust", col=brewer.pal(n=8, name="RdYlBu"))
+corrplot(SC, type="upper", order="hclust", col=brewer.pal(n=8, name="RdYlBu"))
+
+chart.Correlation(PC, histogram=TRUE, pch=19) # p-values(0, 0.001, 0.01, 0.05, 0.1, 1) <=> symbols(“***”, “**”, “*”, “.”, " “)
+chart.Correlation(SC, histogram=TRUE, pch=19) # p-values(0, 0.001, 0.01, 0.05, 0.1, 1) <=> symbols(“***”, “**”, “*”, “.”, " “)
+
+```
+
+
